@@ -2,9 +2,6 @@
 
 namespace App\Providers;
 
-use App\Services\Notification\Gateways\MockEmailGateway;
-use App\Services\Notification\Gateways\MockSmsGateway;
-use App\Services\Notification\Gateways\NotificationGatewayInterface;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -12,18 +9,11 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
-        $this->app->bind(NotificationGatewayInterface::class, MockSmsGateway::class);
-        $this->app->bind(NotificationGatewayInterface::class, MockEmailGateway::class);
+        //
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
         RateLimiter::for('api', function (Request $request) {

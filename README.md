@@ -1,58 +1,119 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Notification Service
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Микросервис массовой рассылки SMS и Email-уведомлений с приоритизацией, идемпотентностью и отслеживанием статусов доставки.
 
-## About Laravel
+## Стек
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **PHP 8.5 / Laravel 13**
+- **PostgreSQL** — персистентное хранение
+- **RabbitMQ** — очередь с приоритетами и retry через DLX
+- **Redis** — кэш, блокировки, дедупликация provider_id → delivery_id
+- **Docker Compose** — локальный запуск всего окружения
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Быстрый старт
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+make dev-init          # первый запуск: .env, build, migrate
+make dev-migrate-refresh-seed  # пересоздать БД с тестовыми пользователями
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Приложение: http://localhost:3000  
+RabbitMQ Management: http://localhost:15672 (guest/guest)
 
-## Contributing
+## API
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### POST `/api/notification`
 
-## Code of Conduct
+Массовая отправка уведомлений.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+**Headers:** `Idempotency-Key: <uuid>`
 
-## Security Vulnerabilities
+```json
+{
+  "channel": "sms",
+  "text": "Your verification code is 1234",
+  "user_ids": [1, 2, 3],
+  "priority": 10
+}
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- `channel`: `sms` | `email`
+- `priority`: 1–10 (10 — наивысший, обгоняет маркетинговые рассылки в RabbitMQ priority queue)
 
-## License
+### GET `/api/user/{user}/notifications`
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+История и текущий статус всех уведомлений подписчика.
+
+### POST `/api/webhooks/gateway/callback`
+
+Callback от провайдера (mock gateway).
+
+```json
+{
+  "provider_id": "sms_abc123",
+  "status": "delivered"
+}
+```
+
+`status`: `delivered` | `failed`
+
+## Статусы доставки
+
+| Статус | Описание |
+|--------|----------|
+| `processing` | Принято, ожидает отправки |
+| `sent` | Передано шлюзу |
+| `delivered` | Подтверждено провайдером |
+| `dropped` | Ошибка доставки / превышен лимит retry |
+
+## Архитектура
+
+```
+Client → API → NotificationService → PostgreSQL
+                    ↓
+              RabbitMQ (priority queue)
+                    ↓
+         ConsumeNotificationDeliveries (workers)
+                    ↓
+              Mock SMS/Email Gateway
+                    ↓
+         Webhook callback → финальный статус
+```
+
+**Надёжность:**
+- At-least-once доставка через persistent RabbitMQ messages
+- Идемпотентность на уровне `idempotency_key` + unique `(notification_id, user_id)`
+- Retry до 3 раз при временных сбоях шлюза (TTL queue + DLX)
+- Redis lock на обработку delivery (защита от duplicate processing)
+- При повторном запросе с тем же Idempotency-Key — переотправка зависших `processing` deliveries
+
+## Структура проекта
+
+```
+app/
+├── Console/Commands/ConsumeNotificationDeliveries.php
+├── Enums/
+├── Http/Controllers/Api/
+├── Services/Notification/
+│   ├── NotificationService.php      # оркестрация
+│   ├── GatewayResolver.php          # выбор SMS/Email gateway
+│   ├── Gateways/                    # mock-провайдеры
+│   └── Messaging/                   # RabbitMQ publisher & connection
+config/rabbitmq.php
+```
+
+## Разработка
+
+```bash
+make dev-test           # PHPUnit
+make dev-pint           # форматирование
+make dev-phpstan        # статический анализ (level 8)
+make dev-workers-status # статус consumer-воркеров
+make dev-shell          # bash в php-контейнере
+```
+
+## Mock-провайдеры
+
+- Блокированные получатели: `+79990000000` (SMS), `test@mail.com` (Email) → `dropped`
+- ~10% запросов → временная ошибка → retry
+- Успешная отправка → `provider_id` вида `sms_*` / `email_*`

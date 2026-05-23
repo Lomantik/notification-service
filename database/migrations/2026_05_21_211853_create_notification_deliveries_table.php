@@ -18,6 +18,10 @@ return new class extends Migration
             $table->string('status');
             $table->string('provider_id')->nullable();
             $table->timestamps();
+
+            $table->unique(['notification_id', 'user_id']);
+            $table->index('status');
+            $table->index('provider_id');
         });
     }
 

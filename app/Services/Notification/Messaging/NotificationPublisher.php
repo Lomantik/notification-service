@@ -1,47 +1,54 @@
 <?php
 
-namespace App\Services\Notification;
+namespace App\Services\Notification\Messaging;
 
 use Exception;
-use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
 
 class NotificationPublisher
 {
+    public function __construct(
+        protected RabbitMqConnectionFactory $connectionFactory,
+    ) {}
+
     /**
      * @throws Exception
      */
     public function publish(int $notificationDeliveryId, int $priority): void
     {
-        $connection = new AMQPStreamConnection('rabbitmq', 5672, 'guest', 'guest');
+        $config = config('rabbitmq');
+
+        $connection = $this->connectionFactory->createConnection();
         $channel = $connection->channel();
 
-        $channel->exchange_declare('notifications_exchange', 'direct', false, true, false);
+        $channel->exchange_declare($config['exchange'], 'direct', false, true, false);
 
         $channel->queue_declare(
-            'notifications_queue',
+            $config['queue'],
             false,
             true,
             false,
             false,
             false,
-            new AMQPTable(['x-max-priority' => 10]));
+            new AMQPTable(['x-max-priority' => $config['max_priority']]),
+        );
 
         $channel->queue_declare(
-            'notifications_retry_queue',
+            $config['retry_queue'],
             false,
             true,
             false,
             false,
             false,
             new AMQPTable([
-                'x-dead-letter-exchange' => 'notifications_exchange',
-                'x-dead-letter-routing-key' => 'notification.route',
-                'x-message-ttl' => 5000,
-            ]));
+                'x-dead-letter-exchange' => $config['exchange'],
+                'x-dead-letter-routing-key' => $config['routing_key'],
+                'x-message-ttl' => $config['retry_ttl_ms'],
+            ]),
+        );
 
-        $channel->queue_bind('notifications_queue', 'notifications_exchange', 'notification.route');
+        $channel->queue_bind($config['queue'], $config['exchange'], $config['routing_key']);
 
         $payload = json_encode([
             'notification_delivery_id' => $notificationDeliveryId,
@@ -54,7 +61,7 @@ class NotificationPublisher
                 'priority' => $priority,
             ]);
 
-            $channel->basic_publish($msg, 'notifications_exchange', 'notification.route');
+            $channel->basic_publish($msg, $config['exchange'], $config['routing_key']);
         }
 
         $channel->close();

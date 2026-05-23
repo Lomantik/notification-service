@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Api;
 
-use App\Enums\NotificationStatus;
+use App\Enums\ProviderCallbackStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\Attributes\FailOnUnknownFields;
 use Illuminate\Foundation\Http\Attributes\StopOnFirstFailure;
@@ -14,15 +14,13 @@ use Illuminate\Validation\Rule;
 class WebhookRequest extends FormRequest
 {
     /**
-     * Get the validation rules that apply to the request.
-     *
      * @return array<string, ValidationRule|array<string|string>|string>
      */
     public function rules(): array
     {
         return [
             'provider_id' => ['required', 'string'],
-            'status' => ['required', Rule::enum(NotificationStatus::class)],
+            'status' => ['required', Rule::enum(ProviderCallbackStatus::class)],
         ];
     }
 

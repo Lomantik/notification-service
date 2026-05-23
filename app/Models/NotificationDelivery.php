@@ -15,7 +15,6 @@ class NotificationDelivery extends Model
         'notification_id',
         'user_id',
         'status',
-        'priority',
         'provider_id',
     ];
 

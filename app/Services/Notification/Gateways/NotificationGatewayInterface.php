@@ -2,14 +2,14 @@
 
 namespace App\Services\Notification\Gateways;
 
-use App\Exceptions\GatewayTimeoutException;
 use App\Exceptions\InvalidRecipientException;
+use App\Exceptions\TemporaryGatewayException;
 
 interface NotificationGatewayInterface
 {
     /**
-     * @throws GatewayTimeoutException (для эмуляции ретраев)
-     * @throws InvalidRecipientException (для статуса dropped)
+     * @throws TemporaryGatewayException
+     * @throws InvalidRecipientException
      */
     public function send(string $to, string $text): string;
 }
