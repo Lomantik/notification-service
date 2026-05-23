@@ -1,0 +1,113 @@
+services:
+    php:
+        user: "${UID:-1000}:${GID:-1000}"
+        build: &php_build
+            context: .
+            dockerfile: docker/php/Dockerfile
+            args:
+                UID: ${UID:-1000}
+                GID: ${GID:-1000}
+            target: development
+        command: >
+            bash -c "
+            composer install &&
+            until (echo > /dev/tcp/db/5432) >/dev/null 2>&1; do sleep 1; done &&
+            (grep -q 'APP_KEY=base64' .env || php artisan key:generate) &&
+            php artisan migrate:refresh --seed --force &&
+            php-fpm"
+        volumes:
+            - .:/var/www/html
+            - /var/www/html/node_modules
+            - /var/www/html/vendor
+        depends_on:
+            redis:
+                condition: service_healthy
+            db:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+        healthcheck:
+            test: [ "CMD-SHELL", "php-fpm -t && echo ok" ]
+            interval: 2s
+            timeout: 2s
+            retries: 20
+    php-worker:
+        user: "${UID:-1000}:${GID:-1000}"
+        build: *php_build
+        depends_on:
+            php:
+                condition: service_healthy
+        volumes:
+            - .:/var/www/html
+            - /var/www/html/node_modules
+            - /var/www/html/vendor
+            - ./docker/php/supervisord.conf:/etc/supervisor/supervisord.conf
+        command: >
+            bash -c "
+            composer dump-autoload &&
+            supervisord"
+    node:
+        build:
+            context: .
+            dockerfile: docker/node/Dockerfile
+            args:
+                UID: ${UID:-1000}
+                GID: ${GID:-1000}
+            target: development
+        ports:
+            - "5174:5174"
+        volumes:
+            - .:/usr/src/app
+            - /usr/src/app/node_modules
+            - /usr/src/app/vendor
+        depends_on:
+            php:
+                condition: service_healthy
+    nginx:
+        build:
+            context: .
+            dockerfile: docker/nginx/Dockerfile
+            target: development
+        ports:
+            - "3000:80"
+        volumes:
+            - .:/usr/share/nginx/html
+            - /usr/share/nginx/html/node_modules
+            - /usr/share/nginx/html/vendor
+        depends_on:
+            - node
+    redis:
+        image: redis:alpine
+        ports:
+            - "6379:6379"
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 5s
+            timeout: 3s
+            retries: 5
+    db:
+        image: postgres:18-alpine
+        shm_size: 128mb
+        environment:
+            POSTGRES_DB: ${DB_DATABASE}
+            POSTGRES_USER: ${DB_USERNAME}
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+        ports:
+            - "5432:${DB_PORT}"
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}" ]
+            interval: 3s
+            timeout: 5s
+            retries: 10
+    rabbitmq:
+        image: rabbitmq:4.3-management-alpine
+        ports:
+            - "15672:15672"
+        environment:
+            RABBITMQ_DEFAULT_USER: guest
+            RABBITMQ_DEFAULT_PASS: guest
+        healthcheck:
+            test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
+            interval: 5s
+            timeout: 5s
+            retries: 5

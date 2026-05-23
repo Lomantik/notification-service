@@ -1,0 +1,7 @@
+parameters:
+    paths:
+        - app/
+        - database/
+        - resources/
+        - routes/
+    level: 8
