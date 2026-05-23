@@ -88,7 +88,7 @@ class NotificationsService
             $this->notificationPublisher->publish($notificationDelivery->id, $priority);
         }
 
-        return $notifications;
+        return $notifications->sortBy('user_id');
     }
 
     /**
