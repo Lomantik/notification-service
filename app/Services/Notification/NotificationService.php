@@ -30,10 +30,14 @@ class NotificationService
      */
     public function getUserNotifications(User $user): array
     {
-        return Cache::remember(
-            "notifications_for_$user->id",
-            10,
-            fn () => $user->load('notificationDeliveries')->notificationDeliveries()->with('notification')->get()->toArray()
+        return Cache::flexible(
+            key: "notifications_for_{$user->id}",
+            ttl: [8, 12],
+            callback: fn () => $user->load('notificationDeliveries')
+                ->notificationDeliveries()
+                ->with('notification')
+                ->get()
+                ->toArray()
         );
     }
 
