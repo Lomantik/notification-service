@@ -20,7 +20,7 @@ class NotificationDeliveryFactory extends Factory
     public function definition(): array
     {
         return [
-            'notification_id' => fn () => NotificationFactory::new()->create()->id,
+            'notification_id' => fn () => NotificationFactory::new()->createOne()->id,
             'user_id' => User::factory(),
             'status' => NotificationStatus::PROCESSING,
             'provider_id' => null,
