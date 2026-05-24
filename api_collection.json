@@ -1,0 +1,141 @@
+{
+    "info": {
+        "_postman_id": "756cd3ca-c7d6-4ed9-998e-32508e2a5fa7",
+        "name": "Notification Service",
+        "description": "Notification Service — микросервис массовой рассылки SMS и Email-уведомлений с приоритизацией, идемпотентностью и отслеживанием статусов доставки.\n\n## API Endpoints\n\n### POST /api/notification\nМассовая отправка уведомлений.\n- Header: `Idempotency-Key: <uuid>`\n- Body: `{ \"channel\": \"sms\"|\"email\", \"text\": \"...\", \"user_ids\": [1,2,3], \"priority\": 10 }`\n\n### GET /api/user/{user}/notifications\nИстория и текущий статус всех уведомлений подписчика.\n\n### POST /api/webhooks/gateway/callback\nCallback от провайдера для обновления статуса доставки.\n- Body: `{ \"provider_id\": \"sms_abc123\", \"status\": \"delivered\"|\"failed\" }`",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_exporter_id": "53902556",
+        "_collection_link": "https://go.postman.co/collection/53902556-756cd3ca-c7d6-4ed9-998e-32508e2a5fa7?source=collection_link"
+    },
+    "item": [
+        {
+            "name": "Get user notifications",
+            "protocolProfileBehavior": {
+                "disabledSystemHeaders": {
+                    "accept": true
+                }
+            },
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "http://127.0.0.1:3000/api/user/1/notifications",
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "api",
+                        "user",
+                        "1",
+                        "notifications"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Batch send notification to users",
+            "protocolProfileBehavior": {
+                "disabledSystemHeaders": {
+                    "accept": true
+                }
+            },
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    },
+                    {
+                        "key": "Idempotency-Key",
+                        "value": "7721e3e7-f977-4706-9d78-5dddc56a3f81",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\r\n    \"channel\": \"sms\",\r\n    \"text\": \"Test Message\",\r\n    \"user_ids\": [1,2,3,4,5,6,7,8,9,10]\r\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "http://127.0.0.1:3000/api/notification",
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "api",
+                        "notification"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Provider delivery verification (webhook)",
+            "protocolProfileBehavior": {
+                "disabledSystemHeaders": {
+                    "accept": true
+                }
+            },
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\r\n    \"provider_id\": \"\",\r\n    \"status\": \"delivered\"\r\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "http://127.0.0.1:3000/api/webhooks/gateway/callback",
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "api",
+                        "webhooks",
+                        "gateway",
+                        "callback"
+                    ]
+                }
+            },
+            "response": []
+        }
+    ]
+}
